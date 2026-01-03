@@ -1,0 +1,14 @@
+# Thai Document RAG System Dependencies
+
+# Core RAG
+lightrag-hku>=1.4.0
+
+# LLM & Embeddings
+openai>=2.0.0
+sentence-transformers>=5.0.0
+
+# Workflow
+langgraph>=0.2.0
+
+# Environment
+python-dotenv>=1.0.0
