@@ -9,9 +9,11 @@ from .llm import deepseek_complete
 from .config import DEFAULT_QUERY_MODE
 from .templates import (
     TemplateType,
+    get_template,
     get_template_example,
     get_template_features,
     list_templates,
+    list_templates_by_category,
     TEMPLATES,
 )
 
@@ -42,7 +44,8 @@ async def retrieve_context(state: DocumentState) -> DocumentState:
     """Retrieve relevant context from LightRAG"""
 
     # Create search query combining template type and user request
-    search_query = f"{state['template_type']} {state['user_request']}"
+    template = get_template(state['template_type'])
+    search_query = f"{template['category']} {state['template_type']} {state['user_request']}"
 
     # Get entities and relations
     entities, relations = await get_entities_and_relations(search_query)
@@ -60,40 +63,109 @@ async def retrieve_context(state: DocumentState) -> DocumentState:
     }
 
 
+def extract_user_data(user_request: str) -> dict:
+    """Extract specific data from user request"""
+    import re
+
+    data = {
+        "location": None,
+        "doc_number": None,
+        "date_range": None,
+        "reference_doc": None,
+        "year": None,
+    }
+
+    # Extract location (จังหวัด) - must be Thai province name pattern
+    loc_match = re.search(r'จังหวัด\s*(\S+)', user_request)
+    if loc_match:
+        data["location"] = loc_match.group(1)
+    else:
+        # Try พื้นที่
+        loc_match = re.search(r'พื้นที่\s*(\S+)', user_request)
+        if loc_match:
+            data["location"] = loc_match.group(1)
+
+    # Extract document number (สทช pattern)
+    doc_match = re.search(r'(สทช\s*\d+[./]?\d*)', user_request)
+    if doc_match:
+        data["doc_number"] = doc_match.group(1)
+
+    # Extract year (25XX or 256X)
+    year_match = re.search(r'(25\d{2}|256\d)', user_request)
+    if year_match:
+        data["year"] = year_match.group(1)
+
+    # Extract date range
+    date_match = re.search(r'วันที่\s*(\d+\s*[-–]\s*\d+\s*\S+\s*\d{4})', user_request)
+    if date_match:
+        data["date_range"] = date_match.group(1)
+
+    return data
+
+
 async def generate_draft(state: DocumentState) -> DocumentState:
     """Generate document draft using exact template format"""
 
     template_type = state['template_type']
-    template_example = get_template_example(template_type)
-    template_features = get_template_features(template_type)
+    template = get_template(template_type)
+    template_example = template['example']
+    template_features = template['key_features']
+    category = template['category']
+    user_request = state['user_request']
+
+    # Extract user data
+    user_data = extract_user_data(user_request)
 
     # Format features as bullet list
     features_text = "\n".join([f"  - {f}" for f in template_features])
 
+    # Build user data section
+    user_data_text = ""
+    if user_data["doc_number"]:
+        user_data_text += f"\n- เลขที่หนังสืออ้างอิง: {user_data['doc_number']}"
+    if user_data["location"]:
+        user_data_text += f"\n- สถานที่/จังหวัด: {user_data['location']}"
+    if user_data["year"]:
+        user_data_text += f"\n- ปี พ.ศ.: {user_data['year']}"
+    if user_data["date_range"]:
+        user_data_text += f"\n- ช่วงวันที่: {user_data['date_range']}"
+
     prompt = f"""คุณเป็นผู้เชี่ยวชาญในการเขียนหนังสือราชการไทย
-ตามระเบียบสำนักนายกรัฐมนตรีว่าด้วยงานสารบรรณ พ.ศ. 2526
 
-ประเภทเอกสาร: {template_type}
+##################################
+# ข้อมูลจากผู้ใช้ (ต้องใช้ข้อมูลนี้!)
+##################################
 
-คุณสมบัติสำคัญของรูปแบบนี้:
+คำขอ: {user_request}
+{user_data_text if user_data_text else ""}
+
+สำคัญมาก: ต้องใช้ข้อมูลจากผู้ใช้ด้านบนเท่านั้น! ห้ามใช้ข้อมูลจากตัวอย่าง!
+
+##################################
+# รูปแบบเอกสาร (ดูโครงสร้างเท่านั้น)
+##################################
+
+ประเภท: {template_type} ({category})
+
+คุณสมบัติ:
 {features_text}
 
-=== ตัวอย่างรูปแบบที่ถูกต้อง (ต้องทำตามนี้เป๊ะ) ===
+ตัวอย่างโครงสร้าง (ดูรูปแบบการจัดหน้าเท่านั้น ห้ามคัดลอกข้อมูล!):
 {template_example}
-=== จบตัวอย่าง ===
 
-คำขอของผู้ใช้:
-{state['user_request']}
+##################################
+# คำสั่ง
+##################################
 
-คำสั่งสำคัญมาก:
-1. สร้างเอกสารตามรูปแบบในตัวอย่างด้านบนเป๊ะๆ
-2. ใส่ข้อมูลจริงทั้งหมด ห้ามใส่ [...] หรือช่องว่างให้กรอก
-3. ใช้การจัดหน้าและการเว้นวรรคเหมือนตัวอย่าง
-4. {"ใช้เลขไทย ๑. ๒. สำหรับหัวข้อหลัก และ 1.1, 2.1 สำหรับหัวข้อย่อย" if template_type == "บันทึกข้อความ" else "จัดชิดขวาสำหรับที่อยู่และลายเซ็น"}
-5. {"สำคัญมาก: 2.1.1, 2.1.2, 2.1.3 ต้องเป็นรายชื่อบุคคลเท่านั้น! เช่น '2.1.1 นายสมชาย ใจดี ตำแหน่ง พนักงาน' ห้ามใส่หัวข้อ เช่น 'ผู้เดินทาง', 'วัตถุประสงค์', 'การเดินทาง'" if template_type == "บันทึกข้อความ" else "สร้างเนื้อหาที่สมบูรณ์"}
-6. สร้างเนื้อหาที่สมบูรณ์ ละเอียด เป็นทางการ
+1. ใช้โครงสร้างและรูปแบบจากตัวอย่าง
+2. ใส่ข้อมูลจากผู้ใช้เท่านั้น (เลขที่หนังสือ, จังหวัด, วันที่)
+3. ห้ามคัดลอกข้อมูลจากตัวอย่าง เช่น:
+   - ห้ามใช้ "นครราชสีมา" ถ้าผู้ใช้ไม่ได้ระบุ
+   - ห้ามใช้ "สทช 2303.3/19" ถ้าผู้ใช้ระบุเลขอื่น
+   - ห้ามใช้ชื่อบุคคลจากตัวอย่าง
+4. สร้างเนื้อหาที่สมบูรณ์ ห้ามใส่ [...] หรือช่องว่าง
 
-เอกสารที่สมบูรณ์:"""
+เอกสาร:"""
 
     draft = await deepseek_complete(prompt)
 
@@ -107,21 +179,34 @@ async def validate_document(state: DocumentState) -> DocumentState:
     errors = []
     draft = state['draft']
     template_type = state['template_type']
+    template = get_template(template_type)
+    category = template['category']
+    user_request = state['user_request']
 
-    if template_type == "บันทึกข้อความ":
+    # Check user data is used (not example data)
+    user_data = extract_user_data(user_request)
+
+    # If user provided doc number, check it's in the output
+    if user_data["doc_number"]:
+        # Normalize for comparison
+        user_num = user_data["doc_number"].replace(" ", "")
+        if user_num not in draft.replace(" ", ""):
+            errors.append(f"User doc number not used: {user_data['doc_number']}")
+
+    # If user provided location, check it's in the output
+    if user_data["location"]:
+        if user_data["location"] not in draft:
+            errors.append(f"User location not used: {user_data['location']}")
+
+    # Validation based on category
+    if category == "บันทึกข้อความ":
         # Check for บันทึกข้อความ header
         if "บันทึกข้อความ" not in draft:
             errors.append("Missing header: บันทึกข้อความ")
 
-        # Check for agency (accepts both terms)
+        # Check for agency
         if "หน่วยงาน" not in draft and "ส่วนราชการ" not in draft:
             errors.append("Missing: หน่วยงาน")
-
-        # Check for Thai numerals sections
-        if "๑." not in draft:
-            errors.append("Missing Thai numeral section: ๑.")
-        if "๒." not in draft:
-            errors.append("Missing Thai numeral section: ๒.")
 
         # Check other required sections
         required = ["ที่", "วันที่", "เรื่อง", "เรียน"]
@@ -129,21 +214,19 @@ async def validate_document(state: DocumentState) -> DocumentState:
             if section not in draft:
                 errors.append(f"Missing: {section}")
 
-    elif template_type == "หนังสือภายนอก":
-        # Check for ตราครุฑ mention
-        if "ตราครุฑ" not in draft and "[ตราครุฑ]" not in draft:
-            # It's OK if not explicitly mentioned, check structure instead
-            pass
-
+    elif category == "หนังสือภายนอก":
         # Check required sections
-        required = ["ที่", "เรื่อง", "เรียน", "ขอแสดงความนับถือ"]
+        required = ["เรื่อง", "เรียน", "ขอแสดงความนับถือ"]
         for section in required:
             if section not in draft:
                 errors.append(f"Missing: {section}")
 
-        # Check for contact info at bottom
-        if "โทร" not in draft:
-            errors.append("Missing contact info: โทร")
+    elif category == "รายงานการประชุม":
+        # Check for meeting report sections
+        required = ["รายงานการประชุม", "ผู้เข้าประชุม", "ระเบียบวาระ", "มติที่ประชุม"]
+        for section in required:
+            if section not in draft:
+                errors.append(f"Missing: {section}")
 
     # Check minimum length
     if len(draft) < 200:
@@ -211,14 +294,14 @@ app = build_workflow()
 
 async def generate_document(
     user_request: str,
-    template_type: TemplateType = "บันทึกข้อความ",
+    template_type: TemplateType = "ขออนุมัติเดินทาง",
 ) -> str:
     """
     Generate a Thai government document based on user request.
 
     Args:
         user_request: Description of what document to generate
-        template_type: Type of template to use ("บันทึกข้อความ" or "หนังสือภายนอก")
+        template_type: Type of template to use
 
     Returns:
         Generated document text
@@ -241,38 +324,52 @@ async def generate_document(
 
 
 def show_templates():
-    """Show available templates for user selection"""
-    print("\n=== เลือกประเภทเอกสาร ===\n")
-    templates = list_templates()
-    for i, t in enumerate(templates, 1):
-        print(f"{i}. {t['name']}")
-        print(f"   {t['description']}")
-        print()
-    return templates
+    """Show available templates for user selection with categories"""
+    print("\n" + "=" * 50)
+    print("     เลือกประเภทเอกสาร")
+    print("=" * 50)
+
+    categories = list_templates_by_category()
+    all_templates = []
+    idx = 1
+
+    for cat_name, templates in categories.items():
+        print(f"\n[{cat_name}]")
+        print("-" * 40)
+        for t in templates:
+            print(f"  {idx}. {t['name']}")
+            print(f"     {t['description']}")
+            all_templates.append(t)
+            idx += 1
+
+    print()
+    return all_templates
 
 
 async def interactive_generate():
     """Interactive document generation with template selection"""
     templates = show_templates()
+    num_templates = len(templates)
 
     # Get user choice
     while True:
         try:
-            choice = input("เลือกประเภท (1-2): ").strip()
+            choice = input(f"เลือกประเภท (1-{num_templates}): ").strip()
             idx = int(choice) - 1
-            if 0 <= idx < len(templates):
+            if 0 <= idx < num_templates:
                 template_type = templates[idx]["type"]
                 break
-            print("กรุณาเลือก 1 หรือ 2")
+            print(f"กรุณาเลือก 1-{num_templates}")
         except ValueError:
             print("กรุณาใส่ตัวเลข")
 
     # Get user request
-    print(f"\nเลือก: {template_type}")
+    template = get_template(template_type)
+    print(f"\nเลือก: {template_type} ({template['category']})")
     request = input("ระบุรายละเอียดเอกสารที่ต้องการ: ").strip()
 
     if not request:
-        request = "ขออนุมัติเดินทางไปราชการ"
+        request = template['description']
 
     print(f"\nกำลังสร้างเอกสาร...")
 
@@ -297,14 +394,52 @@ if __name__ == "__main__":
             # Interactive mode
             await interactive_generate()
         else:
-            # Command line mode
-            template_type = "บันทึกข้อความ"
-            request = " ".join(sys.argv[1:])
+            # Command line mode - show help with template types
+            if sys.argv[1] in ["-h", "--help", "help"]:
+                print("\nUsage: python -m src.workflow [OPTIONS] [REQUEST]")
+                print("\nOptions:")
+                print("  -t, --template TYPE   Template type (use number or name)")
+                print("  -l, --list            List all templates")
+                print("  -h, --help            Show this help")
+                print("\nExamples:")
+                print("  python -m src.workflow")
+                print("  python -m src.workflow -l")
+                print("  python -m src.workflow -t 1 'ขออนุมัติเดินทางไปราชการ'")
+                print("  python -m src.workflow -t ขออนุมัติเดินทาง 'ไปประชุมที่กรุงเทพ'")
+                return
 
-            # Check for template flag
-            if "--external" in sys.argv or "-e" in sys.argv:
-                template_type = "หนังสือภายนอก"
-                request = request.replace("--external", "").replace("-e", "").strip()
+            if sys.argv[1] in ["-l", "--list"]:
+                show_templates()
+                return
+
+            # Parse template flag
+            template_type = "ขออนุมัติเดินทาง"  # default
+            request_parts = []
+            i = 1
+
+            while i < len(sys.argv):
+                arg = sys.argv[i]
+                if arg in ["-t", "--template"]:
+                    if i + 1 < len(sys.argv):
+                        template_arg = sys.argv[i + 1]
+                        # Check if it's a number
+                        try:
+                            idx = int(template_arg) - 1
+                            templates = list_templates()
+                            if 0 <= idx < len(templates):
+                                template_type = templates[idx]["type"]
+                        except ValueError:
+                            # It's a template name
+                            if template_arg in TEMPLATES:
+                                template_type = template_arg
+                        i += 2
+                        continue
+                request_parts.append(arg)
+                i += 1
+
+            request = " ".join(request_parts)
+            if not request:
+                request = get_template(template_type)['description']
 
             print(f"Template: {template_type}")
             print(f"Request: {request}\n")
