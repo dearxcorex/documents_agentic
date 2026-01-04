@@ -13,6 +13,11 @@ if not DEEPSEEK_API_KEY:
 DEEPSEEK_BASE_URL = "https://api.deepseek.com"
 DEEPSEEK_MODEL = "deepseek-chat"  # or "deepseek-reasoner" for reasoning
 
+# LLM Retry Configuration
+LLM_MAX_RETRIES = 3  # Maximum retry attempts for LLM calls
+LLM_RETRY_DELAY = 1.0  # Base delay in seconds (exponential backoff applied)
+LLM_TIMEOUT = 60.0  # Request timeout in seconds
+
 # LightRAG Configuration
 RAG_WORKING_DIR = "./rag_storage"
 CHUNK_TOKEN_SIZE = 1200
@@ -36,3 +41,10 @@ DEFAULT_QUERY_MODE = "naive"  # Changed from "mix" for DeepSeek compatibility
 ENABLE_RERANK = False  # Disabled - requires keyword extraction
 TOP_K = 60
 CHUNK_TOP_K = 20
+
+# Document Generation Settings
+MAX_VALIDATION_RETRIES = 3  # Maximum retry attempts for document validation
+MIN_DOCUMENT_LENGTH = 200  # Minimum document length in characters
+RAG_CONTEXT_THRESHOLD = 200  # Minimum RAG context length before using fallback
+RAG_EXAMPLE_LIMIT = 1500  # Max characters from RAG example in prompt
+USER_REQUEST_PREVIEW_LENGTH = 100  # Characters to include from user request in search query

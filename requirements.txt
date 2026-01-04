@@ -10,5 +10,8 @@ sentence-transformers>=5.0.0
 # Workflow
 langgraph>=0.2.0
 
+# Validation
+pydantic>=2.0.0
+
 # Environment
 python-dotenv>=1.0.0
