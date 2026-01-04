@@ -8,6 +8,35 @@ This module contains:
 
 from typing import Literal
 
+# Thai digit mapping for numbering
+THAI_DIGITS = {
+    '0': '๐', '1': '๑', '2': '๒', '3': '๓', '4': '๔',
+    '5': '๕', '6': '๖', '7': '๗', '8': '๘', '9': '๙',
+}
+
+
+def to_thai_number(n: int) -> str:
+    """Convert integer to Thai numerals"""
+    return ''.join(THAI_DIGITS.get(d, d) for d in str(n))
+
+
+def generate_staff_list_placeholder(count: int = 3) -> str:
+    """
+    Generate dynamic staff list placeholders.
+
+    Args:
+        count: Number of staff members (1-10)
+
+    Returns:
+        Formatted staff list with Thai numbering
+    """
+    count = max(1, min(count, 10))  # Clamp to 1-10
+    lines = []
+    for i in range(1, count + 1):
+        thai_num = to_thai_number(i)
+        lines.append(f"\t๒.๑.{thai_num} [STAFF_{i}]")
+    return '\n'.join(lines)
+
 # All available document types
 TemplateType = Literal[
     # บันทึกข้อความ subtypes
@@ -33,6 +62,7 @@ TemplateType = Literal[
 # =============================================================================
 
 # หนังสือภายใน - Pattern A: ขออนุมัติ/ขอพิจารณา
+# Note: [STAFF_LIST] is a dynamic placeholder that gets expanded based on staff count
 DRAFT_INTERNAL_REQUEST = """	บันทึกข้อความ
 
 ส่วนราชการ   [AGENCY]	([DEPARTMENT])	   โทร. [PHONE]
@@ -51,9 +81,7 @@ DRAFT_INTERNAL_REQUEST = """	บันทึกข้อความ
 
 	๒.๑	เพื่อให้การปฏิบัติงานตามข้อ ๑. เป็นไปด้วยความเรียบร้อย จึงขออนุมัติ[REQUEST_ACTION] ระหว่างวันที่ [DATE_RANGE] ในเขตพื้นที่[LOCATION] โดยมีพนักงานดังนี้
 
-	๒.๑.๑ [STAFF_1]
-	๒.๑.๒ [STAFF_2]
-	๒.๑.๓ [STAFF_3]
+[STAFF_LIST]
 
 	จึงเรียนมาเพื่อโปรด[PURPOSE]
 """
@@ -268,23 +296,13 @@ PLACEHOLDERS = {
         "required": True,
         "category": ["หนังสือภายใน"],
     },
-    "STAFF_1": {
-        "description": "ชื่อ-ตำแหน่งพนักงานคนที่ 1",
-        "example": "นายสมชาย ใจดี       ตำแหน่ง นตป. ก1",
+    "STAFF_LIST": {
+        "description": "รายชื่อพนักงาน (จำนวนตามความเหมาะสม ใช้เลขไทย ๒.๑.๑, ๒.๑.๒, ...)",
+        "example": "\t๒.๑.๑ นายสมชาย ใจดี       ตำแหน่ง นตป. ก1\n\t๒.๑.๒ นายสมศักดิ์ รักงาน   ตำแหน่ง นตป. ก2\n\t๒.๑.๓ นางสาวสมหญิง ขยัน  ตำแหน่ง นตป. ก3",
         "required": True,
         "category": ["หนังสือภายใน"],
-    },
-    "STAFF_2": {
-        "description": "ชื่อ-ตำแหน่งพนักงานคนที่ 2",
-        "example": "นายสมศักดิ์ รักงาน   ตำแหน่ง นตป. ก2",
-        "required": False,
-        "category": ["หนังสือภายใน"],
-    },
-    "STAFF_3": {
-        "description": "ชื่อ-ตำแหน่งพนักงานคนที่ 3",
-        "example": "นางสาวสมหญิง ขยัน  ตำแหน่ง นตป. ก3",
-        "required": False,
-        "category": ["หนังสือภายใน"],
+        "dynamic": True,
+        "dynamic_hint": "สร้างรายชื่อพนักงานตามจำนวนที่เหมาะสม (1-10 คน) ใช้รูปแบบ: ๒.๑.N ชื่อ-นามสกุล ตำแหน่ง",
     },
     "REQUEST_DETAILS": {
         "description": "รายละเอียดสิ่งที่ขออนุมัติ/ขอพิจารณา (ใช้กรณีไม่มีรายชื่อพนักงาน)",

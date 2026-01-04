@@ -1,6 +1,11 @@
 """Thai Government Document Categories - Dynamic Category-Based System"""
 
-from typing import Literal, TypedDict
+import logging
+from typing import Literal
+
+from pydantic import BaseModel, Field, field_validator
+
+logger = logging.getLogger(__name__)
 
 # High-level document categories (3 options instead of 13 templates)
 CategoryType = Literal[
@@ -9,18 +14,31 @@ CategoryType = Literal[
     "รายงานการประชุม",   # Meeting minutes
 ]
 
-class CategoryInfo(TypedDict):
-    """Category information structure"""
-    name: str
-    name_en: str
-    description: str
-    keywords: list[str]
-    required_sections: list[str]
-    optional_sections: list[str]
+
+class CategoryInfo(BaseModel):
+    """Category information structure with Pydantic validation"""
+    name: str = Field(..., min_length=1, description="Thai category name")
+    name_en: str = Field(..., min_length=1, description="English category name")
+    description: str = Field(..., min_length=1, description="Category description")
+    keywords: list[str] = Field(default_factory=list, description="Keywords for classification")
+    required_sections: list[str] = Field(default_factory=list, description="Required document sections")
+    optional_sections: list[str] = Field(default_factory=list, description="Optional document sections")
+    content_patterns: list[list[str]] | None = Field(default=None, description="Content section patterns")
+
+    @field_validator('keywords', 'required_sections', 'optional_sections')
+    @classmethod
+    def validate_non_empty_strings(cls, v: list[str]) -> list[str]:
+        """Ensure list items are non-empty strings"""
+        return [s.strip() for s in v if s and s.strip()]
+
+    model_config = {
+        "extra": "allow",  # Allow extra fields for forward compatibility
+    }
 
 
 # Category definitions with validation rules
-CATEGORIES: dict[CategoryType, CategoryInfo] = {
+# Using Pydantic models for runtime validation
+_CATEGORY_DATA = {
     "หนังสือภายใน": {
         "name": "หนังสือภายใน",
         "name_en": "Internal Memo",
@@ -92,6 +110,16 @@ CATEGORIES: dict[CategoryType, CategoryInfo] = {
     },
 }
 
+# Validate and create Pydantic models at module load time
+CATEGORIES: dict[CategoryType, CategoryInfo] = {}
+for cat_type, cat_data in _CATEGORY_DATA.items():
+    try:
+        CATEGORIES[cat_type] = CategoryInfo(**cat_data)
+        logger.debug(f"Category '{cat_type}' validated successfully")
+    except Exception as e:
+        logger.error(f"Failed to validate category '{cat_type}': {e}")
+        raise
+
 
 def get_category(category_type: CategoryType) -> CategoryInfo:
     """Get category info by type"""
@@ -100,12 +128,14 @@ def get_category(category_type: CategoryType) -> CategoryInfo:
 
 def get_category_keywords(category_type: CategoryType) -> list[str]:
     """Get keywords for a category"""
-    return CATEGORIES.get(category_type, CATEGORIES["หนังสือภายใน"])["keywords"]
+    category = CATEGORIES.get(category_type, CATEGORIES["หนังสือภายใน"])
+    return category.keywords
 
 
 def get_required_sections(category_type: CategoryType) -> list[str]:
     """Get required sections for validation"""
-    return CATEGORIES.get(category_type, CATEGORIES["หนังสือภายใน"])["required_sections"]
+    category = CATEGORIES.get(category_type, CATEGORIES["หนังสือภายใน"])
+    return category.required_sections
 
 
 def list_categories() -> list[dict]:
@@ -113,9 +143,9 @@ def list_categories() -> list[dict]:
     return [
         {
             "type": k,
-            "name": v["name"],
-            "name_en": v["name_en"],
-            "description": v["description"],
+            "name": v.name,
+            "name_en": v.name_en,
+            "description": v.description,
         }
         for k, v in CATEGORIES.items()
     ]

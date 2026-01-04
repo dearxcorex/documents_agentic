@@ -1,11 +1,20 @@
 """LangGraph workflow for Thai Document Generation - Dynamic Category-Based System"""
 
+import logging
 from typing import TypedDict, Literal, Optional
+
 from langgraph.graph import StateGraph, END
 
 from .rag import query, get_entities_and_relations
-from .llm import deepseek_complete
-from .config import DEFAULT_QUERY_MODE
+from .llm import deepseek_complete, LLMError
+from .config import (
+    DEFAULT_QUERY_MODE,
+    MAX_VALIDATION_RETRIES,
+    MIN_DOCUMENT_LENGTH,
+    RAG_CONTEXT_THRESHOLD,
+    RAG_EXAMPLE_LIMIT,
+    USER_REQUEST_PREVIEW_LENGTH,
+)
 from .categories import (
     CategoryType,
     get_category,
@@ -21,6 +30,8 @@ from .templates import (
     get_placeholders_for_category,
     PLACEHOLDERS,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class DocumentState(TypedDict):
@@ -56,7 +67,7 @@ async def classify_category(state: DocumentState) -> DocumentState:
 
     # If user already selected category, skip classification
     if state.get('category'):
-        print(f"Category pre-selected: {state['category']}")
+        logger.info(f"Category pre-selected: {state['category']}")
         return {
             **state,
             "auto_category": state['category'],
@@ -66,8 +77,17 @@ async def classify_category(state: DocumentState) -> DocumentState:
     user_request = state['user_request']
     prompt = CLASSIFICATION_PROMPT.format(user_request=user_request)
 
-    response = await deepseek_complete(prompt)
-    response = response.strip()
+    try:
+        response = await deepseek_complete(prompt)
+        response = response.strip()
+    except LLMError as e:
+        logger.error(f"Classification failed: {e}, defaulting to หนังสือภายใน")
+        return {
+            **state,
+            "category": "หนังสือภายใน",
+            "auto_category": "หนังสือภายใน",
+            "classification_confidence": 0.0,
+        }
 
     # Parse response to get category
     category = None
@@ -83,7 +103,7 @@ async def classify_category(state: DocumentState) -> DocumentState:
         category = "หนังสือภายใน"
         confidence = 0.5
 
-    print(f"Auto-classified: {category} (confidence: {confidence})")
+    logger.info(f"Auto-classified: {category} (confidence: {confidence})")
 
     return {
         **state,
@@ -114,7 +134,9 @@ async def retrieve_context(state: DocumentState) -> DocumentState:
 
     # Combine action keywords with category
     action_str = " ".join(action_keywords) if action_keywords else ""
-    search_query = f"บันทึกข้อความ {action_str} {user_request[:100]}"
+    search_query = f"บันทึกข้อความ {action_str} {user_request[:USER_REQUEST_PREVIEW_LENGTH]}"
+
+    logger.debug(f"RAG search query: {search_query}")
 
     # Get entities and relations
     entities, relations = await get_entities_and_relations(search_query)
@@ -132,14 +154,14 @@ async def retrieve_context(state: DocumentState) -> DocumentState:
         rag_examples = [rag_context]
 
     # If RAG returns little context, use template examples as fallback
-    if not rag_examples or len(str(rag_examples)) < 200:
+    if not rag_examples or len(str(rag_examples)) < RAG_CONTEXT_THRESHOLD:
         fallback_example = get_random_example_for_category(category)
         if fallback_example:
             rag_examples.append(fallback_example)
-            print("Using template fallback for examples")
+            logger.info("Using template fallback for examples")
 
-    print(f"Retrieved {len(entities)} entities, {len(relations)} relations")
-    print(f"RAG examples: {len(rag_examples)}")
+    logger.info(f"Retrieved {len(entities)} entities, {len(relations)} relations")
+    logger.debug(f"RAG examples count: {len(rag_examples)}")
 
     return {
         **state,
@@ -204,6 +226,8 @@ async def generate_draft(state: DocumentState) -> DocumentState:
     category_info = get_category(category)
     user_request = state['user_request']
     rag_examples = state.get('rag_examples', [])
+    previous_errors = state.get('validation_errors', [])
+    retry_count = state.get('retry_count', 0)
 
     # Extract user data
     user_data = extract_user_data(user_request)
@@ -225,10 +249,12 @@ async def generate_draft(state: DocumentState) -> DocumentState:
     # Build placeholder descriptions for the prompt
     placeholder_list = []
     for name, info in placeholders.items():
-        if f"[{name}]" in draft_template:
+        if f"[{name}]" in draft_template or info.get("dynamic"):
             req = "จำเป็น" if info.get("required", False) else "ถ้ามี"
             placeholder_list.append(f"  - [{name}]: {info['description']} ({req})")
             placeholder_list.append(f"    ตัวอย่าง: {info['example']}")
+            if info.get("dynamic_hint"):
+                placeholder_list.append(f"    หมายเหตุ: {info['dynamic_hint']}")
 
     placeholders_text = "\n".join(placeholder_list)
 
@@ -248,7 +274,18 @@ async def generate_draft(state: DocumentState) -> DocumentState:
     # Build example section from RAG (limit to 1 example for reference)
     example_text = ""
     if rag_examples:
-        example_text = f"\n--- ตัวอย่างอ้างอิง (ดูรูปแบบเท่านั้น) ---\n{rag_examples[0][:1500]}\n"
+        example_text = f"\n--- ตัวอย่างอ้างอิง (ดูรูปแบบเท่านั้น) ---\n{rag_examples[0][:RAG_EXAMPLE_LIMIT]}\n"
+
+    # Build error feedback section for retries
+    error_feedback = ""
+    if previous_errors and retry_count > 0:
+        logger.info(f"Retry {retry_count}: Including {len(previous_errors)} error(s) in prompt")
+        error_feedback = f"""
+<previous_errors>
+เอกสารที่สร้างก่อนหน้ามีข้อผิดพลาด กรุณาแก้ไข:
+{chr(10).join(f'- {err}' for err in previous_errors)}
+</previous_errors>
+"""
 
     prompt = f"""<role>
 คุณเป็นเจ้าหน้าที่ธุรการผู้เชี่ยวชาญในการร่างหนังสือราชการไทยตามระเบียบสำนักนายกรัฐมนตรี
@@ -257,10 +294,10 @@ async def generate_draft(state: DocumentState) -> DocumentState:
 <task>
 กรอกแบบฟอร์มหนังสือราชการโดยแทนที่ [PLACEHOLDER] ทุกตัวด้วยเนื้อหาจริง
 </task>
-
+{error_feedback}
 <input>
 คำขอ: {user_request}
-ประเภท: {category} ({category_info['name_en']})
+ประเภท: {category} ({category_info.name_en})
 {user_data_text if user_data_text else ""}
 </input>
 
@@ -293,9 +330,13 @@ async def generate_draft(state: DocumentState) -> DocumentState:
 
 <document>"""
 
-    draft = await deepseek_complete(prompt)
+    try:
+        draft = await deepseek_complete(prompt)
+        logger.info(f"Draft generated successfully (attempt {retry_count + 1})")
+    except LLMError as e:
+        logger.error(f"Draft generation failed: {e}")
+        draft = ""
 
-    print("Draft generated using RAG context")
     return {**state, "draft": draft}
 
 
@@ -307,6 +348,13 @@ async def validate_document(state: DocumentState) -> DocumentState:
     draft = state['draft']
     category = state.get('category') or state.get('auto_category') or "หนังสือภายใน"
     user_request = state['user_request']
+
+    logger.debug(f"Validating document for category: {category}")
+
+    # Check for empty draft (LLM failure)
+    if not draft:
+        errors.append("Document generation failed - empty draft")
+        logger.error("Empty draft received")
 
     # Check for unreplaced placeholders [PLACEHOLDER]
     unreplaced = re.findall(r'\[([A-Z_]+)\]', draft)
@@ -341,13 +389,13 @@ async def validate_document(state: DocumentState) -> DocumentState:
             errors.append(f"User location not used: {user_data['location']}")
 
     # Check minimum length
-    if len(draft) < 200:
-        errors.append("Document too short")
+    if len(draft) < MIN_DOCUMENT_LENGTH:
+        errors.append(f"Document too short (min: {MIN_DOCUMENT_LENGTH} chars)")
 
     retry_count = state.get('retry_count', 0)
 
     if errors:
-        print(f"Validation errors: {errors}")
+        logger.warning(f"Validation failed ({len(errors)} errors): {errors}")
         return {
             **state,
             "validation_errors": errors,
@@ -355,7 +403,7 @@ async def validate_document(state: DocumentState) -> DocumentState:
             "is_valid": False,
         }
     else:
-        print("Validation passed")
+        logger.info("Validation passed")
         return {
             **state,
             "validation_errors": [],
@@ -372,10 +420,13 @@ def should_retry(state: DocumentState) -> Literal["generate", "end"]:
         return "end"
 
     # If not valid but haven't exceeded retries, retry
-    if state.get('retry_count', 0) < 3:
+    retry_count = state.get('retry_count', 0)
+    if retry_count < MAX_VALIDATION_RETRIES:
+        logger.info(f"Retrying generation (attempt {retry_count + 1}/{MAX_VALIDATION_RETRIES})")
         return "generate"
 
     # Max retries exceeded, stop
+    logger.warning(f"Max retries ({MAX_VALIDATION_RETRIES}) exceeded, stopping")
     return "end"
 
 
@@ -493,7 +544,7 @@ async def interactive_generate():
     # Get user request
     if category:
         cat_info = get_category(category)
-        print(f"\nเลือก: {category} ({cat_info['name_en']})")
+        print(f"\nเลือก: {category} ({cat_info.name_en})")
 
     request = input("ระบุรายละเอียดเอกสารที่ต้องการ: ").strip()
 
