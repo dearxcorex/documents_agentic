@@ -1,4 +1,10 @@
-"""Thai Government Document Templates - กสทช. Official Formats"""
+"""Thai Government Document Templates - กสทช. Official Formats
+
+This module contains:
+1. DRAFT templates with [PLACEHOLDER] syntax for dynamic generation
+2. EXAMPLE documents for reference/RAG context
+3. PLACEHOLDERS metadata for validation
+"""
 
 from typing import Literal
 
@@ -20,6 +26,445 @@ TemplateType = Literal[
     "ขอรื้อถอนเสา",
     "ขอขยายสัญญาณ",
 ]
+
+# =============================================================================
+# DRAFT TEMPLATES WITH PLACEHOLDERS
+# These are the templates agent will fill in with [PLACEHOLDER] replaced
+# =============================================================================
+
+# หนังสือภายใน - Pattern A: ขออนุมัติ/ขอพิจารณา
+DRAFT_INTERNAL_REQUEST = """	บันทึกข้อความ
+
+ส่วนราชการ   [AGENCY]	([DEPARTMENT])	   โทร. [PHONE]
+
+ที่ 	[DOC_NUMBER]	วันที่ [DAY] [MONTH_THAI] [YEAR_THAI]
+
+เรื่อง	[SUBJECT]
+
+เรียน   	[RECIPIENT]
+
+๑.	เรื่องเดิม
+
+	ตามหนังสือ [REFERENCE_AGENCY] ที่ [REFERENCE_DOC_NUMBER] ลงวันที่ [REFERENCE_DATE] เรื่อง [REFERENCE_SUBJECT] ได้รับความเห็นชอบ[APPROVAL_DETAILS] รายละเอียดปรากฏตามเอกสารแนบ นั้น
+
+๒.	เรื่องเพื่อพิจารณา
+
+	๒.๑	เพื่อให้การปฏิบัติงานตามข้อ ๑. เป็นไปด้วยความเรียบร้อย จึงขออนุมัติ[REQUEST_ACTION] ระหว่างวันที่ [DATE_RANGE] ในเขตพื้นที่[LOCATION] โดยมีพนักงานดังนี้
+
+	๒.๑.๑ [STAFF_1]
+	๒.๑.๒ [STAFF_2]
+	๒.๑.๓ [STAFF_3]
+
+	จึงเรียนมาเพื่อโปรด[PURPOSE]
+"""
+
+# หนังสือภายใน - Pattern B: รายงานผล
+DRAFT_INTERNAL_REPORT = """	บันทึกข้อความ
+
+ส่วนราชการ   [AGENCY]	([DEPARTMENT])	   โทร. [PHONE]
+
+ที่ 	[DOC_NUMBER]	วันที่ [DAY] [MONTH_THAI] [YEAR_THAI]
+
+เรื่อง	[SUBJECT]
+
+เรียน   	[RECIPIENT]
+
+๑.	เรื่องเดิม
+
+	ตามหนังสือ [REFERENCE_AGENCY] ที่ [REFERENCE_DOC_NUMBER] ลงวันที่ [REFERENCE_DATE] เรื่อง [REFERENCE_SUBJECT] รายละเอียดปรากฏตามเอกสารแนบ นั้น
+
+๒.	ข้อเท็จจริง
+
+	[FACTS_AND_FINDINGS]
+
+	จึงเรียนมาเพื่อโปรด[PURPOSE]
+"""
+
+# หนังสือภายนอก - External Letter
+DRAFT_EXTERNAL_LETTER = """[SENDER_ADDRESS]
+
+[DATE_FULL]
+
+เรื่อง [SUBJECT]
+
+เรียน [RECIPIENT_FULL]
+
+[REFERENCE_LINE]
+
+[ATTACHMENT_LINE]
+
+	[INTRO_PARAGRAPH]
+
+	[BODY_PARAGRAPHS]
+
+	จึงเรียนมาเพื่อโปรด[PURPOSE]
+
+ขอแสดงความนับถือ
+
+
+([SIGNER_NAME])
+[SIGNER_POSITION]
+
+[CONTACT_INFO]
+"""
+
+# รายงานการประชุม - Meeting Minutes
+DRAFT_MEETING_MINUTES = """รายงานการประชุม
+
+[COMMITTEE_NAME]
+
+ครั้งที่ [MEETING_NUMBER] ในวัน[DAY_OF_WEEK]ที่ [DATE_FULL]
+
+ณ [MEETING_LOCATION]
+
+ผู้เข้าประชุม
+[ATTENDEES_LIST]
+
+เริ่มประชุมเวลา  [START_TIME] น.
+
+ประธาน กล่าวเปิดการประชุม ตามระเบียบวาระ ดังนี้
+
+ระเบียบวาระที่ ๑ เรื่องที่ประธานแจ้งให้ที่ประชุมทราบ
+[AGENDA_1_CONTENT]
+
+มติที่ประชุม	[RESOLUTION_1]
+
+ระเบียบวาระที่ ๒ เรื่องรับรองรายงานการประชุม
+[AGENDA_2_CONTENT]
+
+มติที่ประชุม  	[RESOLUTION_2]
+
+ระเบียบวาระที่ ๓ เรื่องเสนอเพื่อทราบและพิจารณา
+[AGENDA_3_CONTENT]
+
+มติที่ประชุม	[RESOLUTION_3]
+
+ระเบียบวาระที่ ๔ เรื่องอื่น ๆ พิจารณา
+[AGENDA_4_CONTENT]
+
+มติที่ประชุม	[RESOLUTION_4]
+
+เลิกประชุมเวลา [END_TIME] น.
+"""
+
+# =============================================================================
+# PLACEHOLDER METADATA
+# Defines what each placeholder means and whether it's required
+# =============================================================================
+
+PLACEHOLDERS = {
+    # Common fields
+    "AGENCY": {
+        "description": "ชื่อหน่วยงานที่ออกหนังสือ",
+        "example": "สำนักงาน กสทช. เขต 23",
+        "required": True,
+        "category": ["หนังสือภายใน"],
+    },
+    "DEPARTMENT": {
+        "description": "ส่วนงานย่อย",
+        "example": "ส่วนตรวจสอบและกำกับดูแล",
+        "required": False,
+        "category": ["หนังสือภายใน"],
+    },
+    "PHONE": {
+        "description": "หมายเลขโทรศัพท์ติดต่อ",
+        "example": "4348",
+        "required": False,
+        "category": ["หนังสือภายใน", "หนังสือภายนอก"],
+    },
+    "DOC_NUMBER": {
+        "description": "เลขที่หนังสือ",
+        "example": "สทช 2203.3/",
+        "required": True,
+        "category": ["หนังสือภายใน", "หนังสือภายนอก"],
+    },
+    "DAY": {
+        "description": "วันที่ (ตัวเลข)",
+        "example": "15",
+        "required": True,
+        "category": ["หนังสือภายใน", "หนังสือภายนอก", "รายงานการประชุม"],
+    },
+    "MONTH_THAI": {
+        "description": "เดือน (ภาษาไทย)",
+        "example": "มกราคม",
+        "required": True,
+        "category": ["หนังสือภายใน"],
+    },
+    "YEAR_THAI": {
+        "description": "ปี พ.ศ.",
+        "example": "๒๕๖๘",
+        "required": True,
+        "category": ["หนังสือภายใน"],
+    },
+    "DATE_FULL": {
+        "description": "วันที่เต็ม",
+        "example": "๗ กุมภาพันธ์ ๒๕๖๘",
+        "required": True,
+        "category": ["หนังสือภายนอก", "รายงานการประชุม"],
+    },
+    "SUBJECT": {
+        "description": "หัวข้อเรื่อง",
+        "example": "ขออนุมัติเดินทางไปปฏิบัติงานนอกที่ตั้ง",
+        "required": True,
+        "category": ["หนังสือภายใน", "หนังสือภายนอก"],
+    },
+    "RECIPIENT": {
+        "description": "ผู้รับหนังสือ (ภายใน)",
+        "example": "ผภภ. 23",
+        "required": True,
+        "category": ["หนังสือภายใน"],
+    },
+    "RECIPIENT_FULL": {
+        "description": "ผู้รับหนังสือ (ภายนอก) พร้อมตำแหน่ง",
+        "example": "กรรมการผู้จัดการใหญ่บริษัท โทรคมนาคมแห่งชาติจำกัด (มหาชน)",
+        "required": True,
+        "category": ["หนังสือภายนอก"],
+    },
+    "REFERENCE_AGENCY": {
+        "description": "หน่วยงานที่อ้างอิง",
+        "example": "สำนักงาน กสทช. เขต 23",
+        "required": True,
+        "category": ["หนังสือภายใน"],
+    },
+    "REFERENCE_DOC_NUMBER": {
+        "description": "เลขที่หนังสืออ้างอิง",
+        "example": "สทช 2203/12",
+        "required": True,
+        "category": ["หนังสือภายใน"],
+    },
+    "REFERENCE_DATE": {
+        "description": "วันที่หนังสืออ้างอิง",
+        "example": "๑๐ มกราคม ๒๕๖๙",
+        "required": True,
+        "category": ["หนังสือภายใน"],
+    },
+    "REFERENCE_SUBJECT": {
+        "description": "เรื่องของหนังสืออ้างอิง",
+        "example": "แผนการปฏิบัติงานตรวจสอบและกำกับดูแลประจำปี 2567",
+        "required": True,
+        "category": ["หนังสือภายใน"],
+    },
+    "APPROVAL_DETAILS": {
+        "description": "รายละเอียดที่ได้รับความเห็นชอบ (ต่อจาก 'ได้รับความเห็นชอบ')",
+        "example": "แผนปฏิบัติงานตรวจสอบและกำกับดูแลประจำปี ๒๕๖๗ ของสำนักงาน กสทช. เขต ๒๓ โดย ผภภ. 23",
+        "required": True,
+        "category": ["หนังสือภายใน"],
+    },
+    "REQUEST_ACTION": {
+        "description": "การกระทำที่ขออนุมัติ (ต่อจาก 'จึงขออนุมัติ')",
+        "example": "ให้พนักงาน ภภ. 23 เดินทางไปปฏิบัติหน้าที่ตรวจสอบคลื่นความถี่",
+        "required": True,
+        "category": ["หนังสือภายใน"],
+    },
+    "DATE_RANGE": {
+        "description": "ช่วงวันที่ปฏิบัติงาน",
+        "example": "20 – 22 กุมภาพันธ์ 2567",
+        "required": True,
+        "category": ["หนังสือภายใน"],
+    },
+    "LOCATION": {
+        "description": "สถานที่/พื้นที่ปฏิบัติงาน",
+        "example": "จังหวัดบุรีรัมย์ และพื้นที่ใกล้เคียง",
+        "required": True,
+        "category": ["หนังสือภายใน"],
+    },
+    "STAFF_1": {
+        "description": "ชื่อ-ตำแหน่งพนักงานคนที่ 1",
+        "example": "นายสมชาย ใจดี       ตำแหน่ง นตป. ก1",
+        "required": True,
+        "category": ["หนังสือภายใน"],
+    },
+    "STAFF_2": {
+        "description": "ชื่อ-ตำแหน่งพนักงานคนที่ 2",
+        "example": "นายสมศักดิ์ รักงาน   ตำแหน่ง นตป. ก2",
+        "required": False,
+        "category": ["หนังสือภายใน"],
+    },
+    "STAFF_3": {
+        "description": "ชื่อ-ตำแหน่งพนักงานคนที่ 3",
+        "example": "นางสาวสมหญิง ขยัน  ตำแหน่ง นตป. ก3",
+        "required": False,
+        "category": ["หนังสือภายใน"],
+    },
+    "REQUEST_DETAILS": {
+        "description": "รายละเอียดสิ่งที่ขออนุมัติ/ขอพิจารณา (ใช้กรณีไม่มีรายชื่อพนักงาน)",
+        "example": "2.1 เพื่อให้การปฏิบัติงานเป็นไปด้วยความเรียบร้อย จึงขออนุมัติ...",
+        "required": False,
+        "category": ["หนังสือภายใน"],
+    },
+    "FACTS_AND_FINDINGS": {
+        "description": "ข้อเท็จจริงและผลการดำเนินการ",
+        "example": "สำนักงาน กสทช. เขต 23 ได้ดำเนินการตรวจสอบ... สรุปผลดังนี้",
+        "required": True,
+        "category": ["หนังสือภายใน"],
+    },
+    "PURPOSE": {
+        "description": "วัตถุประสงค์ (ต่อจาก 'จึงเรียนมาเพื่อโปรด')",
+        "example": "พิจารณาอนุมัติ",
+        "required": True,
+        "category": ["หนังสือภายใน", "หนังสือภายนอก"],
+    },
+    # External letter specific
+    "SENDER_ADDRESS": {
+        "description": "ที่อยู่ผู้ส่ง (ด้านบนหนังสือ)",
+        "example": "สำนักงาน กสทช. ๘๗ ถนนพหลโยธิน ซอย ๘ แขวงสามเสนใน เขตพญาไท กรุงเทพฯ ๑๐๔๐๐",
+        "required": False,
+        "category": ["หนังสือภายนอก"],
+    },
+    "REFERENCE_LINE": {
+        "description": "อ้างถึง (ถ้ามี)",
+        "example": "อ้างถึง หนังสือบริษัท ทรู มูฟ ที่ TUC/2025/001 ลงวันที่ 16 มกราคม 2568",
+        "required": False,
+        "category": ["หนังสือภายนอก"],
+    },
+    "ATTACHMENT_LINE": {
+        "description": "สิ่งที่ส่งมาด้วย (ถ้ามี)",
+        "example": "สิ่งที่ส่งมาด้วย ข้อมูลเสาส่งสัญญาณ จำนวน ๖ ต้น",
+        "required": False,
+        "category": ["หนังสือภายนอก"],
+    },
+    "INTRO_PARAGRAPH": {
+        "description": "ย่อหน้าเปิดเรื่อง",
+        "example": "ตามหนังสือที่อ้างถึง บริษัท... ประสบปัญหา... ความละเอียดแจ้งแล้ว นั้น",
+        "required": True,
+        "category": ["หนังสือภายนอก"],
+    },
+    "BODY_PARAGRAPHS": {
+        "description": "เนื้อหาหลัก",
+        "example": "สำนักงาน กสทช. ขอเรียนว่า... จึงขอให้ท่านดำเนินการ...",
+        "required": True,
+        "category": ["หนังสือภายนอก"],
+    },
+    "SIGNER_NAME": {
+        "description": "ชื่อผู้ลงนาม",
+        "example": "นายสุธีระ พึ่งธรรม",
+        "required": True,
+        "category": ["หนังสือภายนอก"],
+    },
+    "SIGNER_POSITION": {
+        "description": "ตำแหน่งผู้ลงนาม",
+        "example": "ผู้อำนวยการสำนักกำกับดูแลกิจการโทรคมนาคม ปฏิบัติการแทน เลขาธิการ กสทช.",
+        "required": True,
+        "category": ["หนังสือภายนอก"],
+    },
+    "CONTACT_INFO": {
+        "description": "ข้อมูลติดต่อส่วนท้าย",
+        "example": "ส่วนตรวจสอบและกำกับดูแล โทร. 4348",
+        "required": False,
+        "category": ["หนังสือภายนอก"],
+    },
+    # Meeting minutes specific
+    "COMMITTEE_NAME": {
+        "description": "ชื่อคณะกรรมการ",
+        "example": "คณะกรรมการตรวจสอบและกำกับดูแล",
+        "required": True,
+        "category": ["รายงานการประชุม"],
+    },
+    "MEETING_NUMBER": {
+        "description": "ครั้งที่ประชุม/ปี",
+        "example": "1/2568",
+        "required": True,
+        "category": ["รายงานการประชุม"],
+    },
+    "DAY_OF_WEEK": {
+        "description": "วันในสัปดาห์",
+        "example": "ศุกร์",
+        "required": True,
+        "category": ["รายงานการประชุม"],
+    },
+    "MEETING_LOCATION": {
+        "description": "สถานที่ประชุม",
+        "example": "ห้องประชุม สำนักงาน กสทช. เขต ๒3",
+        "required": True,
+        "category": ["รายงานการประชุม"],
+    },
+    "ATTENDEES_LIST": {
+        "description": "รายชื่อผู้เข้าประชุม",
+        "example": "1) นางสาวธันยพัฒน์ ภาดาเพิ่มผลสมบัติ ประธานกรรมการ\n2) นายวิทวัส ตั้งประเสริฐ กรรมการ",
+        "required": True,
+        "category": ["รายงานการประชุม"],
+    },
+    "START_TIME": {
+        "description": "เวลาเริ่มประชุม",
+        "example": "13.30",
+        "required": True,
+        "category": ["รายงานการประชุม"],
+    },
+    "END_TIME": {
+        "description": "เวลาเลิกประชุม",
+        "example": "15.00",
+        "required": True,
+        "category": ["รายงานการประชุม"],
+    },
+    "AGENDA_1_CONTENT": {
+        "description": "เนื้อหาวาระที่ 1",
+        "example": "ประธานแจ้งให้ที่ประชุมทราบเรื่อง...",
+        "required": True,
+        "category": ["รายงานการประชุม"],
+    },
+    "RESOLUTION_1": {
+        "description": "มติวาระที่ 1",
+        "example": "รับทราบตามที่ประธานแจ้ง",
+        "required": True,
+        "category": ["รายงานการประชุม"],
+    },
+    "AGENDA_2_CONTENT": {
+        "description": "เนื้อหาวาระที่ 2",
+        "example": "เลขานุการเสนอรายงานการประชุมครั้งที่ผ่านมา",
+        "required": False,
+        "category": ["รายงานการประชุม"],
+    },
+    "RESOLUTION_2": {
+        "description": "มติวาระที่ 2",
+        "example": "รับรองรายงานการประชุม",
+        "required": False,
+        "category": ["รายงานการประชุม"],
+    },
+    "AGENDA_3_CONTENT": {
+        "description": "เนื้อหาวาระที่ 3",
+        "example": "พิจารณาเรื่อง...",
+        "required": False,
+        "category": ["รายงานการประชุม"],
+    },
+    "RESOLUTION_3": {
+        "description": "มติวาระที่ 3",
+        "example": "เห็นชอบ",
+        "required": False,
+        "category": ["รายงานการประชุม"],
+    },
+    "AGENDA_4_CONTENT": {
+        "description": "เนื้อหาวาระที่ 4 (อื่นๆ)",
+        "example": "-",
+        "required": False,
+        "category": ["รายงานการประชุม"],
+    },
+    "RESOLUTION_4": {
+        "description": "มติวาระที่ 4",
+        "example": "-",
+        "required": False,
+        "category": ["รายงานการประชุม"],
+    },
+}
+
+
+def get_draft_template(category: str, is_request: bool = False) -> str:
+    """Get the appropriate draft template for a category"""
+    if category == "หนังสือภายใน":
+        return DRAFT_INTERNAL_REQUEST if is_request else DRAFT_INTERNAL_REPORT
+    elif category == "หนังสือภายนอก":
+        return DRAFT_EXTERNAL_LETTER
+    elif category == "รายงานการประชุม":
+        return DRAFT_MEETING_MINUTES
+    else:
+        return DRAFT_INTERNAL_REPORT
+
+
+def get_placeholders_for_category(category: str) -> dict:
+    """Get placeholders relevant to a specific category"""
+    return {
+        k: v for k, v in PLACEHOLDERS.items()
+        if category in v.get("category", [])
+    }
 
 # =============================================================================
 # บันทึกข้อความ Examples (Internal Memo)
@@ -557,3 +1002,41 @@ def list_templates_by_category() -> dict[str, list[dict]]:
             "description": v["description"],
         })
     return categories
+
+
+def get_templates_for_category(category: str) -> list[dict]:
+    """Get all templates that belong to a category (for RAG fallback)"""
+    # Map high-level category to template categories
+    category_mapping = {
+        "หนังสือภายใน": ["บันทึกข้อความ"],
+        "หนังสือภายนอก": ["หนังสือภายนอก"],
+        "รายงานการประชุม": ["รายงานการประชุม"],
+    }
+
+    target_cats = category_mapping.get(category, [category])
+
+    return [
+        {
+            "type": k,
+            "name": v["name"],
+            "example": v["example"],
+            "key_features": v["key_features"],
+        }
+        for k, v in TEMPLATES.items()
+        if v["category"] in target_cats
+    ]
+
+
+def get_random_example_for_category(category: str) -> str:
+    """Get a random example document for a category (for few-shot prompting)"""
+    import random
+    templates = get_templates_for_category(category)
+    if templates:
+        return random.choice(templates)["example"]
+    return ""
+
+
+def get_all_examples_for_category(category: str) -> list[str]:
+    """Get all example documents for a category"""
+    templates = get_templates_for_category(category)
+    return [t["example"] for t in templates]
